@@ -6,4 +6,5 @@ seaborn
 wordcloud
 transformers
 scikit-learn
+google-search-results
 serpapi
