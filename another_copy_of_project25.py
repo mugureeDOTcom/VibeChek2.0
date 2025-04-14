@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import re
 import time
-from serpapi.google-search-results import GoogleSearch  # Correct import
+from serpapi import GoogleSearch  # Correct import
 import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
 import matplotlib.pyplot as plt
