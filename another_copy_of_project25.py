@@ -3,17 +3,7 @@ import streamlit as st
 import pandas as pd
 import re
 import time
-# Try to import GoogleSearch from the original package, otherwise use our custom implementation
-try:
-    from google_search_results import GoogleSearch
-except ImportError:
-    try:
-        from serpapi import GoogleSearch
-    except ImportError:
-        st.warning("SerpAPI package not found. Using custom implementation.")
-        # Import our custom implementation
-        from serpapi_wrapper import GoogleSearch
-
+from serpapi import GoogleSearch  # Correct import
 import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
 import matplotlib.pyplot as plt
@@ -56,24 +46,6 @@ place_id = st.text_input("📍 Enter Google Place ID")
 # Max Reviews
 max_reviews = st.slider("🔄 How many reviews to fetch?", min_value=50, max_value=500, step=50, value=150)
 
-# Add sorting options
-sort_option = st.selectbox(
-    "🔄 Sort reviews by:",
-    options=["Most Recent First", "Highest Rating First", "Lowest Rating First"],
-    index=0
-)
-
-# Add date filtering options
-st.subheader("Advanced Options")
-use_date_filter = st.checkbox("Filter by date range", value=False)
-
-if use_date_filter:
-    col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input("Start date", value=None)
-    with col2:
-        end_date = st.date_input("End date", value=None)
-
 if st.button("🚀 Fetch & Analyze Reviews") and place_id:
     # Function to clean text
     def clean_text(text):
@@ -91,14 +63,6 @@ if st.button("🚀 Fetch & Analyze Reviews") and place_id:
                 "place_id": place_id,
                 "api_key": SERPAPI_KEY,
             }
-            
-            # Add sorting parameter based on user selection
-            if sort_option == "Most Recent First":
-                params["sort"] = "newest"  # This is actually the default
-            elif sort_option == "Highest Rating First":
-                params["sort"] = "highest_rating"
-            elif sort_option == "Lowest Rating First":
-                params["sort"] = "lowest_rating"
             
             # Test API connection with just one request first
             try:
@@ -122,47 +86,36 @@ if st.button("🚀 Fetch & Analyze Reviews") and place_id:
             all_reviews = []
             start = 0
             
-            # Improved status display
-            status_container = st.empty()
             progress_bar = st.progress(0)
-            status_text = st.empty()
             
             # Make multiple requests with pagination
             while len(all_reviews) < max_reviews:
                 params["start"] = start
                 
                 try:
-                    # Update status before each API call
-                    status_container.info(f"Fetching reviews (batch {start//10 + 1})...")
-                    
                     search = GoogleSearch(params)
                     results = search.get_dict()
                     reviews = results.get("reviews", [])
                     
                     if not reviews:
-                        status_container.warning("No more reviews available")
                         break
                         
                     all_reviews.extend(reviews)
                     start += len(reviews)
                     
-                    # Update progress and status text
+                    # Update progress
                     progress = min(len(all_reviews) / max_reviews, 1.0)
                     progress_bar.progress(progress)
-                    status_text.text(f"Fetched {len(all_reviews)}/{max_reviews} reviews")
                     
                     # Sleep to respect API rate limits
                     time.sleep(2)
                     
                 except Exception as e:
-                    status_container.warning(f"Error during pagination (fetched {len(all_reviews)} reviews so far): {str(e)}")
+                    st.warning(f"Error during pagination (fetched {len(all_reviews)} reviews so far): {str(e)}")
                     break
             
-            # Update final status
-            if len(all_reviews) > 0:
-                status_container.success(f"✅ Successfully fetched {len(all_reviews)} reviews!")
-            else:
-                status_container.error("Failed to fetch any reviews")
+            if not all_reviews:
+                st.error("No reviews could be fetched. Please check your Place ID and API key.")
                 st.stop()
                 
             df = pd.DataFrame(all_reviews[:max_reviews])
@@ -178,23 +131,6 @@ if st.button("🚀 Fetch & Analyze Reviews") and place_id:
             if len(df) == 0:
                 st.error("No valid reviews found after filtering.")
                 st.stop()
-            
-            # Date filtering
-            if use_date_filter and "time" in df.columns and df["time"].notna().any():
-                # Convert timestamp to datetime
-                df["date"] = pd.to_datetime(df["time"].astype(float), unit='s', errors='coerce')
-                
-                # Apply date filters
-                if start_date:
-                    df = df[df["date"] >= pd.Timestamp(start_date)]
-                if end_date:
-                    df = df[df["date"] <= pd.Timestamp(end_date)]
-                
-                if len(df) == 0:
-                    st.warning("No reviews found in the selected date range")
-                    st.stop()
-                else:
-                    st.success(f"Filtered to {len(df)} reviews in the selected date range")
                 
             st.session_state.reviews_df = df
             st.success(f"✅ {len(df)} reviews fetched!")
@@ -209,45 +145,15 @@ if st.button("🚀 Fetch & Analyze Reviews") and place_id:
             # Clean reviews
             df["Cleaned_Review"] = df["snippet"].apply(clean_text)
             
-            # Updated ratings analysis code
+            # Simple ratings analysis
             if "rating" in df.columns and df["rating"].notna().any():
-                try:
-                    # Convert to numeric, coerce errors to NaN
-                    df["rating_numeric"] = pd.to_numeric(df["rating"], errors="coerce")
-                    
-                    # Drop NaN values and ensure we still have data
-                    df_ratings = df.dropna(subset=["rating_numeric"])
-                    
-                    if len(df_ratings) > 0:
-                        fig, ax = plt.subplots(figsize=(6, 4))
-                        
-                        # Round to nearest integer if needed (sometimes ratings might be like 4.7)
-                        df_ratings["rating_rounded"] = df_ratings["rating_numeric"].round().astype(int)
-                        
-                        # Get counts and sort
-                        rating_counts = df_ratings["rating_rounded"].value_counts().sort_index()
-                        
-                        # Create a bar chart with clear labels
-                        bars = ax.bar(rating_counts.index, rating_counts.values, color="skyblue")
-                        
-                        # Add values on top of bars
-                        for bar in bars:
-                            height = bar.get_height()
-                            ax.text(bar.get_x() + bar.get_width()/2., height + 0.1,
-                                    f'{int(height)}', ha='center', va='bottom')
-                        
-                        # Improve x-axis to show all possible ratings (1-5)
-                        ax.set_xticks(range(1, 6))
-                        ax.set_xlabel("Rating (stars)")
-                        ax.set_ylabel("Number of Reviews")
-                        ax.set_title("Rating Distribution")
-                        st.pyplot(fig)
-                    else:
-                        st.info("No valid numerical ratings found in the data.")
-                except Exception as e:
-                    st.warning(f"Error generating ratings chart: {str(e)}")
-            else:
-                st.info("No rating data available for visualization.")
+                fig, ax = plt.subplots(figsize=(6, 4))
+                rating_counts = df["rating"].value_counts().sort_index()
+                ax.bar(rating_counts.index, rating_counts.values)
+                ax.set_xlabel("Rating")
+                ax.set_ylabel("Count")
+                ax.set_title("Rating Distribution")
+                st.pyplot(fig)
             
             # Sentiment Analysis with VADER only
             sia = SentimentIntensityAnalyzer()
