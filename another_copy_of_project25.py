@@ -3,7 +3,17 @@ import streamlit as st
 import pandas as pd
 import re
 import time
-from serpapi import GoogleSearch
+# Try to import GoogleSearch from the original package, otherwise use our custom implementation
+try:
+    from google_search_results import GoogleSearch
+except ImportError:
+    try:
+        from serpapi import GoogleSearch
+    except ImportError:
+        st.warning("SerpAPI package not found. Using custom implementation.")
+        # Import our custom implementation
+        from serpapi_wrapper import GoogleSearch
+
 import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
 import matplotlib.pyplot as plt
@@ -634,7 +644,7 @@ if st.button("🚀 Fetch & Analyze Reviews") and place_id:
                 "Train staff on common customer pain points identified in the analysis"
             ])
             
-            for i, action in enumerate(action_items, 1):
+            for i, action in enumerate(action_items,for i, action in enumerate(action_items, 1):
                 st.markdown(f"{i}. {action}")
             
     except Exception as e:
