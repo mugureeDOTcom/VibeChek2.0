@@ -644,7 +644,7 @@ if st.button("🚀 Fetch & Analyze Reviews") and place_id:
                 "Train staff on common customer pain points identified in the analysis"
             ])
             
-            for i, action in enumerate(action_items,
+            for i, action in enumerate(action_items, 1):
                 st.markdown(f"{i}. {action}")
             
     except Exception as e:
